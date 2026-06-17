@@ -10,13 +10,13 @@ import {
   Briefcase,
   Users,
   CheckSquare,
-  ImageIcon,
   Sparkles,
   FileText,
   Layers,
   Star,
   GraduationCap,
-  NotebookPen,
+  BookMarked,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -76,6 +76,12 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Reviews",
+    items: [
+      { label: "Progressions", href: "/dashboard/progressions", icon: TrendingUp },
+    ],
+  },
+  {
     title: "Flashcards",
     items: [
       { label: "Sets", href: "/dashboard/flashcards", icon: Layers },
@@ -84,14 +90,10 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
-    title: "Notes",
-    items: [{ label: "Notes", href: "/dashboard/notes", icon: NotebookPen }],
-  },
-  {
     title: "Other",
     items: [
       { label: "Action Items", href: "/dashboard/action-items", icon: CheckSquare },
-      { label: "Images", href: "/dashboard/images", icon: ImageIcon },
+      { label: "Docs / TDP Guide", href: "/dashboard/docs", icon: BookMarked },
     ],
   },
 ];

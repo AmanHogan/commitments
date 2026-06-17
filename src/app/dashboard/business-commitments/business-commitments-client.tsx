@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
-import { Trash2, Pencil, Plus } from "lucide-react";
+import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { Trash2, Pencil, Plus, Download, Upload, Info } from "lucide-react";
+import { JsonImportModal } from "@/components/json-import-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +33,18 @@ import {
   createBusinessCommitment,
   updateBusinessCommitment,
   deleteBusinessCommitment,
+  bulkCreateBusinessCommitments,
 } from "./actions";
+
+type SortField = "none" | "started" | "dateCompleted";
+type SortDir = "asc" | "desc";
+
+const STATUS_COLORS: Record<CommitmentStatus, string> = {
+  PENDING: "bg-yellow-100 text-yellow-800",
+  IN_PROGRESS: "bg-blue-100 text-blue-800",
+  COMPLETED: "bg-green-100 text-green-800",
+  FAILED: "bg-red-100 text-red-800",
+};
 
 interface FormState {
   workItem: string;
@@ -93,7 +105,110 @@ function toInput(form: FormState): CreateBusinessCommitmentOneInput {
 }
 
 /**
+ * Trigger a browser download of a markdown string.
+ * @param content The markdown text.
+ * @param filename The base filename (without extension).
+ * @returns Nothing.
+ */
+function downloadMarkdown(content: string, filename: string): void {
+  downloadBlob(content, `${filename}.md`, "text/markdown; charset=utf-8");
+}
+
+/**
+ * Trigger a browser download of any text blob.
+ * @param content The text content.
+ * @param filename The full filename including extension.
+ * @param mime The MIME type.
+ * @returns Nothing.
+ */
+function downloadBlob(content: string, filename: string, mime: string): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Export business commitments as a JSON file matching the app's import schema.
+ * @param commitments The commitments to export.
+ * @returns Nothing.
+ */
+function exportJson(commitments: BusinessCommitmentOne[]): void {
+  const envelope = {
+    type: "bcomm1",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    records: commitments.map(({ id: _id, createdAt: _ca, updatedAt: _ua, ...rest }) => rest),
+  };
+  downloadBlob(
+    JSON.stringify(envelope, null, 2),
+    "business-partner-impact.json",
+    "application/json",
+  );
+}
+
+/**
+ * Generate a markdown export of all business commitments.
+ * @param commitments The commitments to export.
+ * @returns Nothing.
+ */
+function exportMarkdown(commitments: BusinessCommitmentOne[]): void {
+  let md = "# Business Partner Impact Commitments\n\n";
+  for (const c of commitments) {
+    md += `## ${c.workItem}\n\n`;
+    md += `**Status:** ${c.status.replace("_", " ")}  \n`;
+    if (c.started) md += `**Started:** ${c.started}  \n`;
+    if (c.dateCompleted) md += `**Completed:** ${c.dateCompleted}  \n`;
+    if (c.applicationContext)
+      md += `**Application Context:** ${c.applicationContext}  \n`;
+    md += "\n";
+    if (c.description) md += `${c.description}\n\n`;
+    if (c.problemOpportunity)
+      md += `**Problem / Opportunity:** ${c.problemOpportunity}\n\n`;
+    if (c.whoBenefited) md += `**Who Benefited:** ${c.whoBenefited}\n\n`;
+    if (c.impact) md += `**Impact:** ${c.impact}\n\n`;
+    if (c.alignment) md += `**Alignment:** ${c.alignment}\n\n`;
+    if (c.valueEntries.length > 0) {
+      md += `### Value Entries\n\n`;
+      for (const v of c.valueEntries) {
+        md += `- **${v.label}:** ${v.value}\n`;
+      }
+      md += "\n";
+    }
+    if (c.statusNotes) md += `**Status Notes:** ${c.statusNotes}\n\n`;
+    md += "---\n\n";
+  }
+  downloadMarkdown(md, "business-partner-impact");
+}
+
+/**
+ * Labeled vertical form field wrapper.
+ * @param props The label text and field control.
+ * @returns The rendered field.
+ */
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-1">
+      <Label>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+/**
  * Interactive manager for Business Partner Impact commitments.
+ * Includes description card, sort controls, markdown export, and full CRUD.
  * @param props Contains the server-loaded `initialCommitments`.
  * @returns The rendered client UI.
  */
@@ -108,17 +223,29 @@ export function BusinessCommitmentsClient({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [valueLabel, setValueLabel] = useState<string>(VALUE_CATEGORIES[0]);
   const [valueText, setValueText] = useState("");
+  const [sortField, setSortField] = useState<SortField>("none");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [importOpen, setImportOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const sorted = useMemo<BusinessCommitmentOne[]>(() => {
+    if (sortField === "none") return commitments;
+    return [...commitments].sort((a, b) => {
+      const av = (sortField === "started" ? a.started : a.dateCompleted) ?? "";
+      const bv = (sortField === "started" ? b.started : b.dateCompleted) ?? "";
+      return sortDir === "asc"
+        ? av.localeCompare(bv)
+        : bv.localeCompare(av);
+    });
+  }, [commitments, sortField, sortDir]);
 
   /**
    * Add the staged value entry to the form.
    * @returns Nothing.
    */
   function addValueEntry(): void {
-    if (!valueText.trim()) {
-      return;
-    }
+    if (!valueText.trim()) return;
     setForm((prev) => ({
       ...prev,
       valueEntries: [
@@ -177,25 +304,26 @@ export function BusinessCommitmentsClient({
 
   /**
    * Load a commitment into the form for editing.
-   * @param commitment The commitment to edit.
+   * @param c The commitment to edit.
    * @returns Nothing.
    */
-  function startEdit(commitment: BusinessCommitmentOne): void {
-    setEditingId(commitment.id);
+  function startEdit(c: BusinessCommitmentOne): void {
+    setEditingId(c.id);
     setForm({
-      workItem: commitment.workItem,
-      applicationContext: commitment.applicationContext ?? "",
-      description: commitment.description ?? "",
-      problemOpportunity: commitment.problemOpportunity ?? "",
-      whoBenefited: commitment.whoBenefited ?? "",
-      impact: commitment.impact ?? "",
-      alignment: commitment.alignment ?? "",
-      statusNotes: commitment.statusNotes ?? "",
-      started: commitment.started ?? "",
-      dateCompleted: commitment.dateCompleted ?? "",
-      status: commitment.status,
-      valueEntries: commitment.valueEntries,
+      workItem: c.workItem,
+      applicationContext: c.applicationContext ?? "",
+      description: c.description ?? "",
+      problemOpportunity: c.problemOpportunity ?? "",
+      whoBenefited: c.whoBenefited ?? "",
+      impact: c.impact ?? "",
+      alignment: c.alignment ?? "",
+      statusNotes: c.statusNotes ?? "",
+      started: c.started ?? "",
+      dateCompleted: c.dateCompleted ?? "",
+      status: c.status,
+      valueEntries: c.valueEntries,
     });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   /**
@@ -214,9 +342,104 @@ export function BusinessCommitmentsClient({
     });
   }
 
+  /**
+   * Bulk-import business commitments from parsed JSON records.
+   * @param records The raw records from the import modal.
+   * @returns Nothing.
+   */
+  async function handleBulkImport(records: unknown[]): Promise<void> {
+    await bulkCreateBusinessCommitments(records);
+    const refreshed = await (await import("./actions")).getBusinessCommitments();
+    setCommitments(refreshed);
+  }
+
   return (
     <div className="flex flex-col gap-6">
+      {/* Description card */}
+      <Card className="border-l-4 border-l-primary bg-muted/40">
+        <CardContent className="flex gap-3 pt-4">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div className="text-sm text-muted-foreground space-y-1">
+            <p>
+              <strong className="text-foreground">Section 1 — Business &amp; Project Work Impact</strong>{" "}
+              (4,000 char limit, 3-5 items)
+            </p>
+            <p>
+              Highlight your top 3-5 accomplishments that supported your BP team. Use STAR format in
+              flowing paragraph form. Each entry needs scope, your specific contribution, and a
+              quantified outcome — cost savings, time reduction, or efficiency gains. Lead results
+              with a number. Use "I" language, not "we."
+            </p>
+            <a href="/dashboard/docs" className="inline-block pt-1 text-primary hover:underline text-xs font-medium">
+              View full TDP writing guide →
+            </a>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Toolbar: sort + export */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium">Sort by</span>
+        <Select
+          value={sortField}
+          onValueChange={(v) => setSortField(v as SortField)}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">None</SelectItem>
+            <SelectItem value="started">Date started</SelectItem>
+            <SelectItem value="dateCompleted">Date completed</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={sortDir}
+          onValueChange={(v) => setSortDir(v as SortDir)}
+        >
+          <SelectTrigger className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="asc">Ascending</SelectItem>
+            <SelectItem value="desc">Descending</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="ml-auto flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload className="h-4 w-4" />
+            Import JSON
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportJson(sorted)}
+          >
+            <Download className="h-4 w-4" />
+            Export JSON
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportMarkdown(sorted)}
+          >
+            <Download className="h-4 w-4" />
+            Export MD
+          </Button>
+        </div>
+      </div>
+
+      {/* Form */}
       <Card>
+        <CardHeader>
+          <CardTitle>
+            {editingId ? "Edit commitment" : "Add commitment"}
+          </CardTitle>
+        </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <Field label="Work item *">
@@ -265,7 +488,10 @@ export function BusinessCommitmentsClient({
                 rows={2}
                 value={form.whoBenefited}
                 onChange={(e) =>
-                  setForm((prev) => ({ ...prev, whoBenefited: e.target.value }))
+                  setForm((prev) => ({
+                    ...prev,
+                    whoBenefited: e.target.value,
+                  }))
                 }
               />
             </Field>
@@ -291,7 +517,10 @@ export function BusinessCommitmentsClient({
                 rows={2}
                 value={form.statusNotes}
                 onChange={(e) =>
-                  setForm((prev) => ({ ...prev, statusNotes: e.target.value }))
+                  setForm((prev) => ({
+                    ...prev,
+                    statusNotes: e.target.value,
+                  }))
                 }
               />
             </Field>
@@ -332,9 +561,9 @@ export function BusinessCommitmentsClient({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {COMMITMENT_STATUSES.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status.replace("_", " ")}
+                  {COMMITMENT_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s.replace("_", " ")}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -389,7 +618,9 @@ export function BusinessCommitmentsClient({
               </Button>
             </div>
 
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error ? (
+              <p className="text-sm text-destructive">{error}</p>
+            ) : null}
             <div className="flex gap-2">
               <Button type="submit" disabled={isPending}>
                 {editingId ? "Save changes" : "Add commitment"}
@@ -411,16 +642,19 @@ export function BusinessCommitmentsClient({
         </CardContent>
       </Card>
 
+      {/* List */}
       <div className="flex flex-col gap-3">
-        {commitments.length === 0 ? (
+        {sorted.length === 0 ? (
           <p className="text-sm text-muted-foreground">No commitments yet.</p>
         ) : (
-          commitments.map((c) => (
+          sorted.map((c) => (
             <Card key={c.id}>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex flex-wrap items-center gap-2">
                   {c.workItem}
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_COLORS[c.status]}`}
+                  >
                     {c.status.replace("_", " ")}
                   </span>
                 </CardTitle>
@@ -430,6 +664,30 @@ export function BusinessCommitmentsClient({
                   <p className="text-muted-foreground">{c.applicationContext}</p>
                 ) : null}
                 {c.description ? <p>{c.description}</p> : null}
+                {c.problemOpportunity ? (
+                  <div>
+                    <span className="font-medium text-xs text-muted-foreground">
+                      Problem / Opportunity
+                    </span>
+                    <p>{c.problemOpportunity}</p>
+                  </div>
+                ) : null}
+                {c.whoBenefited ? (
+                  <div>
+                    <span className="font-medium text-xs text-muted-foreground">
+                      Who benefited
+                    </span>
+                    <p>{c.whoBenefited}</p>
+                  </div>
+                ) : null}
+                {c.impact ? (
+                  <div>
+                    <span className="font-medium text-xs text-muted-foreground">
+                      Impact
+                    </span>
+                    <p>{c.impact}</p>
+                  </div>
+                ) : null}
                 {c.valueEntries.length > 0 ? (
                   <ul className="mt-1 list-inside list-disc text-xs text-muted-foreground">
                     {c.valueEntries.map((entry, i) => (
@@ -441,7 +699,7 @@ export function BusinessCommitmentsClient({
                   </ul>
                 ) : null}
                 <p className="text-xs text-muted-foreground">
-                  Started: {c.started ?? "—"} • Completed:{" "}
+                  Started: {c.started ?? "—"} · Completed:{" "}
                   {c.dateCompleted ?? "—"}
                 </p>
               </CardContent>
@@ -469,26 +727,19 @@ export function BusinessCommitmentsClient({
           ))
         )}
       </div>
-    </div>
-  );
-}
 
-/**
- * Labeled vertical form field wrapper.
- * @param props The label text and field control.
- * @returns The rendered field.
- */
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <div className="flex flex-col gap-1">
-      <Label>{label}</Label>
-      {children}
+      <JsonImportModal
+        expectedType="bcomm1"
+        label="Business Partner Impact"
+        previewColumns={[
+          { key: "workItem", label: "Work Item" },
+          { key: "status", label: "Status" },
+          { key: "started", label: "Started" },
+        ]}
+        onImport={handleBulkImport}
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+      />
     </div>
   );
 }

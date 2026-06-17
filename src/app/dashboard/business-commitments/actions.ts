@@ -122,3 +122,26 @@ export async function deleteBusinessCommitment(id: string): Promise<void> {
   await BusinessCommitmentOne.deleteOne({ _id: id, userId });
   revalidatePath(ROUTE);
 }
+
+/**
+ * Bulk-create business commitments from imported JSON records.
+ * Each record is validated through bcommSchema before insertion.
+ * @param records The raw parsed records from the import file.
+ * @returns The number of records successfully created.
+ */
+export async function bulkCreateBusinessCommitments(
+  records: unknown[],
+): Promise<{ created: number }> {
+  const userId = await requireUserId();
+  await connectToDatabase();
+  let created = 0;
+  for (const raw of records) {
+    const parsed = bcommSchema.safeParse(raw);
+    if (parsed.success) {
+      await BusinessCommitmentOne.create({ ...parsed.data, userId });
+      created++;
+    }
+  }
+  revalidatePath(ROUTE);
+  return { created };
+}

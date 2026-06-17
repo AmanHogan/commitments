@@ -6,6 +6,7 @@ import {
   createEventCommitment,
   updateEventCommitment,
   deleteEventCommitment,
+  bulkCreateEventCommitments,
 } from "@/lib/event-commitment-service";
 import type { EventCommitment } from "@/lib/types";
 
@@ -48,4 +49,15 @@ export async function updateItem(
  */
 export async function deleteItem(id: string): Promise<void> {
   return deleteEventCommitment(DevelopmentCommitmentTwo, id, ROUTE);
+}
+
+/**
+ * Bulk-create innovation commitments from imported JSON records.
+ * @param records The raw parsed records from the import file.
+ * @returns The number of records created.
+ */
+export async function bulkCreateItems(
+  records: unknown[],
+): Promise<{ created: number }> {
+  return bulkCreateEventCommitments(DevelopmentCommitmentTwo, records, ROUTE);
 }

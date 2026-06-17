@@ -28,7 +28,9 @@ const moduleSchema = z.object({
 
 const commitmentSchema = z.object({
   itemName: z.string().min(1, "Name is required."),
+  description: z.string().nullish(),
   itemDate: z.string().nullish(),
+  dateCompleted: z.string().nullish(),
   modules: z.array(moduleSchema).optional(),
 });
 
@@ -52,7 +54,9 @@ function toDTO(doc: DevelopmentCommitmentOneDoc): DCommOneDTO {
   return {
     id: doc._id.toString(),
     itemName: doc.itemName,
+    description: doc.description ?? null,
     itemDate: doc.itemDate ?? null,
+    dateCompleted: doc.dateCompleted ?? null,
     modules,
     createdAt: (doc.createdAt as Date).toISOString(),
     updatedAt: (doc.updatedAt as Date).toISOString(),
@@ -120,4 +124,27 @@ export async function deleteDevelopmentCommitment(id: string): Promise<void> {
   await connectToDatabase();
   await DevelopmentCommitmentOne.deleteOne({ _id: id, userId });
   revalidatePath(ROUTE);
+}
+
+/**
+ * Bulk-create development commitments from imported JSON records.
+ * Each record is validated through commitmentSchema before insertion.
+ * @param records The raw parsed records from the import file.
+ * @returns The number of records successfully created.
+ */
+export async function bulkCreateDevelopmentCommitments(
+  records: unknown[],
+): Promise<{ created: number }> {
+  const userId = await requireUserId();
+  await connectToDatabase();
+  let created = 0;
+  for (const raw of records) {
+    const parsed = commitmentSchema.safeParse(raw);
+    if (parsed.success) {
+      await DevelopmentCommitmentOne.create({ ...parsed.data, userId });
+      created++;
+    }
+  }
+  revalidatePath(ROUTE);
+  return { created };
 }

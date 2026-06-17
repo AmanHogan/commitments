@@ -129,3 +129,30 @@ export async function deleteEventCommitment(
   await model.deleteOne({ _id: id, userId });
   revalidatePath(revalidate);
 }
+
+/**
+ * Bulk-create event commitments for the current user from an imported JSON array.
+ * Each record is validated through the shared eventSchema before insertion.
+ * @param model The Mongoose model.
+ * @param records The raw parsed records from the import file.
+ * @param revalidate The route path to revalidate.
+ * @returns The number of records successfully created.
+ */
+export async function bulkCreateEventCommitments(
+  model: Model<EventCommitmentDoc>,
+  records: unknown[],
+  revalidate: string,
+): Promise<{ created: number }> {
+  const userId = await requireUserId();
+  await connectToDatabase();
+  let created = 0;
+  for (const raw of records) {
+    const parsed = eventSchema.safeParse(raw);
+    if (parsed.success) {
+      await model.create({ ...parsed.data, userId });
+      created++;
+    }
+  }
+  revalidatePath(revalidate);
+  return { created };
+}

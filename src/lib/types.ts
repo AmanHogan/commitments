@@ -49,6 +49,68 @@ export interface CreateOneOnOneInput {
   outOfOfficePlans?: string | null;
 }
 
+// ── Progressions (STAR-formatted curated submissions) ─────────────────────────
+
+/** The source collection a STAR entry was imported from. */
+export type StarSourceType = "bcomm1" | "bcomm2" | "dcomm2";
+
+/**
+ * A single STAR-formatted accomplishment used in a progression section.
+ * Optionally linked back to the commitment it was imported from.
+ */
+export interface StarEntry {
+  /** Local identifier within the progression (uuid or source id). */
+  id: string;
+  /** Which collection it came from, or null if hand-written. */
+  sourceType: StarSourceType | null;
+  /** The source commitment id, or null if hand-written. */
+  sourceId: string | null;
+  title: string;
+  situation: string;
+  task: string;
+  action: string;
+  result: string;
+}
+
+/** A non-STAR development accomplishment (paragraph form). */
+export interface DevelopmentEntry {
+  id: string;
+  sourceId: string | null;
+  title: string;
+  body: string;
+  hours: number | null;
+}
+
+export interface Progression {
+  id: string;
+  title: string;
+  businessEntries: StarEntry[];
+  programEntries: StarEntry[];
+  developmentEntries: DevelopmentEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveProgressionInput {
+  title: string;
+  businessEntries: Omit<StarEntry, "id">[];
+  programEntries: Omit<StarEntry, "id">[];
+  developmentEntries: Omit<DevelopmentEntry, "id">[];
+}
+
+// ── Resume files ──────────────────────────────────────────────────────────────
+
+/** Metadata for an uploaded resume PDF (never includes the file bytes). */
+export interface ResumeFileMeta {
+  id: string;
+  label: string;
+  originalName: string;
+  contentType: string;
+  size: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Client-facing DTOs. Server Actions convert Mongoose documents into these
 // plain, serializable shapes (ObjectId -> string id) before returning them.
 
@@ -160,7 +222,9 @@ export interface LearningModuleInput {
 export interface DevelopmentCommitmentOne {
   id: string;
   itemName: string;
+  description: string | null;
   itemDate: string | null;
+  dateCompleted: string | null;
   modules: LearningModule[];
   createdAt: string;
   updatedAt: string;
@@ -168,7 +232,9 @@ export interface DevelopmentCommitmentOne {
 
 export interface CreateDevelopmentCommitmentOneInput {
   itemName: string;
+  description?: string | null;
   itemDate?: string | null;
+  dateCompleted?: string | null;
   modules?: LearningModuleInput[];
 }
 
