@@ -1,13 +1,5 @@
 import mongoose, { type Mongoose } from "mongoose";
 
-const MONGODB_URI: string | undefined = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-  throw new Error(
-    "MONGODB_URI is not set. Add it to .env.local (see .env.example).",
-  );
-}
-
 interface MongooseCache {
   conn: Mongoose | null;
   promise: Promise<Mongoose> | null;
@@ -34,8 +26,17 @@ export async function connectToDatabase(): Promise<Mongoose> {
   if (cache.conn) {
     return cache.conn;
   }
+  // Read (and validate) the URI lazily — only when a connection is actually
+  // needed at runtime. Reading it at module scope would throw during
+  // `next build` page-data collection, where no DB connection is required.
+  const mongoUri: string | undefined = process.env.MONGODB_URI;
+  if (!mongoUri) {
+    throw new Error(
+      "MONGODB_URI is not set. Add it to .env.local (see .env.example).",
+    );
+  }
   if (!cache.promise) {
-    cache.promise = mongoose.connect(MONGODB_URI as string, {
+    cache.promise = mongoose.connect(mongoUri, {
       bufferCommands: false,
     });
   }
