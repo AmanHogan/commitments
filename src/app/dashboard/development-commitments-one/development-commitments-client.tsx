@@ -2,20 +2,15 @@
 
 import { useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, Plus, Pencil, Download, Upload, Info } from "lucide-react";
+import { Dialog } from "radix-ui";
+import { Trash2, Plus, Pencil, Download, Upload, Info, X } from "lucide-react";
 import { JsonImportModal } from "@/components/json-import-modal";
 import { createZip, slugifyFileName } from "@/lib/zip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -121,12 +116,6 @@ function moduleToInput(mod: LearningModule): LearningModuleInput {
 }
 
 /**
- * Trigger a browser download of a markdown string.
- * @param content The markdown text.
- * @param filename The base filename (without extension).
- * @returns Nothing.
- */
-/**
  * Trigger a browser download of any text blob.
  * @param content The text content.
  * @param filename The full filename including extension.
@@ -215,295 +204,9 @@ function exportMarkdown(items: DevelopmentCommitmentOne[]): void {
 }
 
 /**
- * Single commitment card with its learning modules and an add/edit module form.
- * @param props The item and its action callbacks.
- * @returns The rendered card.
- */
-function CommitmentCard({
-  item,
-  disabled,
-  onPersist,
-  onDelete,
-  onEditItem,
-}: {
-  item: DevelopmentCommitmentOne;
-  disabled: boolean;
-  onPersist: (item: DevelopmentCommitmentOne) => void;
-  onDelete: () => void;
-  onEditItem: (item: DevelopmentCommitmentOne) => void;
-}): React.JSX.Element {
-  const [draft, setDraft] = useState<ModuleDraft>(emptyModuleDraft());
-  const [editingModId, setEditingModId] = useState<string | null>(null);
-  const [showModForm, setShowModForm] = useState(false);
-
-  /**
-   * Save the module draft (add new or update existing) and persist.
-   * @returns Nothing.
-   */
-  function saveModule(): void {
-    if (!draft.moduleName.trim()) return;
-    const newMod: LearningModule = {
-      id: editingModId ?? "temp-" + Date.now().toString(),
-      moduleName: draft.moduleName.trim(),
-      type: draft.type || null,
-      hours: draft.hours ? Number(draft.hours) : null,
-      dateStarted: draft.dateStarted || null,
-      dateFinished: draft.dateFinished || null,
-      description: draft.description || null,
-      finished: draft.finished,
-      required: draft.required,
-    };
-    const updatedMods = editingModId
-      ? item.modules.map((m) => (m.id === editingModId ? newMod : m))
-      : [...item.modules, newMod];
-    onPersist({ ...item, modules: updatedMods });
-    setDraft(emptyModuleDraft());
-    setShowModForm(false);
-    setEditingModId(null);
-  }
-
-  /**
-   * Load a module into the draft form for editing.
-   * @param mod The module to edit.
-   * @returns Nothing.
-   */
-  function startEditModule(mod: LearningModule): void {
-    setEditingModId(mod.id);
-    setDraft({
-      moduleName: mod.moduleName,
-      type: mod.type ?? "",
-      hours: mod.hours?.toString() ?? "",
-      dateStarted: mod.dateStarted ?? "",
-      dateFinished: mod.dateFinished ?? "",
-      description: mod.description ?? "",
-      finished: mod.finished,
-      required: mod.required,
-    });
-    setShowModForm(true);
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <CardTitle>{item.itemName}</CardTitle>
-            {item.description ? (
-              <p className="mt-0.5 text-sm text-muted-foreground">{item.description}</p>
-            ) : null}
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {item.itemDate ? `Started: ${item.itemDate}` : ""}
-              {item.itemDate && item.dateCompleted ? " · " : ""}
-              {item.dateCompleted ? `Completed: ${item.dateCompleted}` : ""}
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={disabled}
-            onClick={() => onEditItem(item)}
-            aria-label="Edit commitment"
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3 text-sm">
-        {/* Module list */}
-        {item.modules.length > 0 ? (
-          <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Modules
-            </p>
-            {item.modules.map((mod) => (
-              <div key={mod.id} className="flex flex-col gap-0.5 rounded-md bg-muted/40 p-2">
-                <div className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={mod.finished}
-                    disabled={disabled}
-                    onChange={() =>
-                      onPersist({
-                        ...item,
-                        modules: item.modules.map((m) =>
-                          m.id === mod.id ? { ...m, finished: !m.finished } : m,
-                        ),
-                      })
-                    }
-                  />
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className={mod.finished ? "line-through text-muted-foreground" : "font-medium"}>
-                      {mod.moduleName}
-                      {mod.hours != null ? ` (${mod.hours}h)` : ""}
-                      {mod.required ? (
-                        <span className="ml-1 text-xs text-muted-foreground">[required]</span>
-                      ) : null}
-                    </span>
-                    {mod.description ? (
-                      <span className="text-xs text-muted-foreground">{mod.description}</span>
-                    ) : null}
-                    {(mod.dateStarted ?? mod.dateFinished) ? (
-                      <span className="text-xs text-muted-foreground">
-                        {mod.dateStarted ?? "—"} → {mod.dateFinished ?? "—"}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      disabled={disabled}
-                      onClick={() => startEditModule(mod)}
-                      aria-label="Edit module"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      disabled={disabled}
-                      onClick={() =>
-                        onPersist({
-                          ...item,
-                          modules: item.modules.filter((m) => m.id !== mod.id),
-                        })
-                      }
-                      aria-label="Remove module"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        {/* Module add/edit form */}
-        {showModForm ? (
-          <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {editingModId ? "Edit module" : "New module"}
-            </p>
-            <div className="flex flex-col gap-1">
-              <Label>Module name *</Label>
-              <Input
-                value={draft.moduleName}
-                onChange={(e) => setDraft((d) => ({ ...d, moduleName: e.target.value }))}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label>Description</Label>
-              <Textarea
-                rows={2}
-                value={draft.description}
-                onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1">
-                <Label>Type</Label>
-                <Input
-                  value={draft.type}
-                  onChange={(e) => setDraft((d) => ({ ...d, type: e.target.value }))}
-                  placeholder="e.g. Course"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label>Hours</Label>
-                <Input
-                  type="number"
-                  value={draft.hours}
-                  onChange={(e) => setDraft((d) => ({ ...d, hours: e.target.value }))}
-                  min={0}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label>Date started</Label>
-                <Input
-                  type="date"
-                  value={draft.dateStarted}
-                  onChange={(e) => setDraft((d) => ({ ...d, dateStarted: e.target.value }))}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label>Date completed</Label>
-                <Input
-                  type="date"
-                  value={draft.dateFinished}
-                  onChange={(e) => setDraft((d) => ({ ...d, dateFinished: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={draft.finished}
-                  onChange={(e) => setDraft((d) => ({ ...d, finished: e.target.checked }))}
-                />
-                Finished
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={draft.required}
-                  onChange={(e) => setDraft((d) => ({ ...d, required: e.target.checked }))}
-                />
-                Required
-              </label>
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" size="sm" disabled={disabled} onClick={saveModule}>
-                {editingModId ? "Save module" : "Add module"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setShowModForm(false);
-                  setEditingModId(null);
-                  setDraft(emptyModuleDraft());
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="self-start"
-            disabled={disabled}
-            onClick={() => setShowModForm(true)}
-          >
-            <Plus className="h-4 w-4" />
-            Add module
-          </Button>
-        )}
-      </CardContent>
-      <CardFooter className="justify-end">
-        <Button
-          variant="destructive"
-          size="sm"
-          disabled={disabled}
-          onClick={onDelete}
-        >
-          <Trash2 className="h-4 w-4" />
-          Delete
-        </Button>
-      </CardFooter>
-    </Card>
-  );
-}
-
-/**
  * Interactive manager for Development Commitment items and their learning modules.
- * Includes description card, sort controls, markdown export, and full module CRUD.
+ * Renders a sortable table; creating or opening a row launches a modal that manages
+ * the commitment and its modules together.
  * @param props Contains the server-loaded `initialItems`.
  * @returns The rendered client UI.
  */
@@ -514,7 +217,12 @@ export function DevelopmentCommitmentsClient({
 }): React.JSX.Element {
   const [items, setItems] = useState<DevelopmentCommitmentOne[]>(initialItems);
   const [itemForm, setItemForm] = useState<ItemFormState>(emptyItemForm());
+  const [modules, setModules] = useState<LearningModule[]>([]);
+  const [moduleDraft, setModuleDraft] = useState<ModuleDraft>(emptyModuleDraft());
+  const [showModForm, setShowModForm] = useState(false);
+  const [editingModId, setEditingModId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>("none");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [importOpen, setImportOpen] = useState(false);
@@ -532,55 +240,34 @@ export function DevelopmentCommitmentsClient({
   }, [items, sortField, sortDir]);
 
   /**
-   * Create a new development commitment from the form.
-   * @param event The form submit event.
+   * Reset the module draft form back to a blank, hidden state.
    * @returns Nothing.
    */
-  function handleCreate(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-    setError(null);
-    if (!itemForm.itemName.trim()) {
-      setError("Name is required.");
-      return;
-    }
-    if (editingId) {
-      // Update the top-level item metadata (name, dates) while keeping existing modules.
-      const existing = items.find((i) => i.id === editingId);
-      if (!existing) return;
-      const payload = toInput(itemForm, existing.modules.map(moduleToInput));
-      startTransition(async () => {
-        try {
-          const updated = await updateDevelopmentCommitment(editingId, payload);
-          if (updated) {
-            setItems((prev) => prev.map((i) => (i.id === editingId ? updated : i)));
-          }
-          setEditingId(null);
-          setItemForm(emptyItemForm());
-        } catch {
-          setError("Could not update commitment.");
-        }
-      });
-      return;
-    }
-    startTransition(async () => {
-      try {
-        const created = await createDevelopmentCommitment(
-          toInput(itemForm, []),
-        );
-        setItems((prev) => [created, ...prev]);
-        setItemForm(emptyItemForm());
-      } catch {
-        setError("Could not create commitment.");
-      }
-    });
+  function resetModuleDraft(): void {
+    setModuleDraft(emptyModuleDraft());
+    setShowModForm(false);
+    setEditingModId(null);
   }
 
   /**
-   * Load a commitment's metadata into the form for editing.
+   * Open the modal in create mode with a blank form.
+   * @returns Nothing.
+   */
+  function openCreate(): void {
+    setEditingId(null);
+    setItemForm(emptyItemForm());
+    setModules([]);
+    resetModuleDraft();
+    setError(null);
+    setModalOpen(true);
+  }
+
+  /**
+   * Open the modal in edit mode populated from a commitment.
    * @param item The item to edit.
    * @returns Nothing.
    */
-  function startEditItem(item: DevelopmentCommitmentOne): void {
+  function openEdit(item: DevelopmentCommitmentOne): void {
     setEditingId(item.id);
     setItemForm({
       itemName: item.itemName,
@@ -588,33 +275,121 @@ export function DevelopmentCommitmentsClient({
       itemDate: item.itemDate ?? "",
       dateCompleted: item.dateCompleted ?? "",
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setModules(item.modules);
+    resetModuleDraft();
+    setError(null);
+    setModalOpen(true);
   }
 
   /**
-   * Persist a commitment with updated modules by calling the update server action.
-   * @param item The full commitment with new modules applied.
+   * Close the modal and reset transient form state.
    * @returns Nothing.
    */
-  function persist(item: DevelopmentCommitmentOne): void {
-    const payload = toInput(
-      { itemName: item.itemName, description: item.description ?? "", itemDate: item.itemDate ?? "", dateCompleted: item.dateCompleted ?? "" },
-      item.modules.map(moduleToInput),
+  function closeModal(): void {
+    setModalOpen(false);
+    setEditingId(null);
+    setItemForm(emptyItemForm());
+    setModules([]);
+    resetModuleDraft();
+    setError(null);
+  }
+
+  /**
+   * Save the module draft into modal-local state (add new or update existing).
+   * @returns Nothing.
+   */
+  function saveModule(): void {
+    if (!moduleDraft.moduleName.trim()) return;
+    const newMod: LearningModule = {
+      id: editingModId ?? "temp-" + Date.now().toString(),
+      moduleName: moduleDraft.moduleName.trim(),
+      type: moduleDraft.type || null,
+      hours: moduleDraft.hours ? Number(moduleDraft.hours) : null,
+      dateStarted: moduleDraft.dateStarted || null,
+      dateFinished: moduleDraft.dateFinished || null,
+      description: moduleDraft.description || null,
+      finished: moduleDraft.finished,
+      required: moduleDraft.required,
+    };
+    setModules((prev) =>
+      editingModId ? prev.map((m) => (m.id === editingModId ? newMod : m)) : [...prev, newMod],
     );
+    resetModuleDraft();
+  }
+
+  /**
+   * Load a module into the draft form for editing.
+   * @param mod The module to edit.
+   * @returns Nothing.
+   */
+  function startEditModule(mod: LearningModule): void {
+    setEditingModId(mod.id);
+    setModuleDraft({
+      moduleName: mod.moduleName,
+      type: mod.type ?? "",
+      hours: mod.hours?.toString() ?? "",
+      dateStarted: mod.dateStarted ?? "",
+      dateFinished: mod.dateFinished ?? "",
+      description: mod.description ?? "",
+      finished: mod.finished,
+      required: mod.required,
+    });
+    setShowModForm(true);
+  }
+
+  /**
+   * Toggle a module's finished flag in modal-local state.
+   * @param modId The module id.
+   * @returns Nothing.
+   */
+  function toggleModule(modId: string): void {
+    setModules((prev) =>
+      prev.map((m) => (m.id === modId ? { ...m, finished: !m.finished } : m)),
+    );
+  }
+
+  /**
+   * Remove a module from modal-local state.
+   * @param modId The module id.
+   * @returns Nothing.
+   */
+  function removeModule(modId: string): void {
+    setModules((prev) => prev.filter((m) => m.id !== modId));
+  }
+
+  /**
+   * Create or update the commitment (with its modules) from the form, then close.
+   * @param event The form submit event.
+   * @returns Nothing.
+   */
+  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    setError(null);
+    if (!itemForm.itemName.trim()) {
+      setError("Name is required.");
+      return;
+    }
+    const payload = toInput(itemForm, modules.map(moduleToInput));
     startTransition(async () => {
       try {
-        const updated = await updateDevelopmentCommitment(item.id, payload);
-        if (updated) {
-          setItems((prev) => prev.map((ex) => (ex.id === item.id ? updated : ex)));
+        if (editingId) {
+          const updated = await updateDevelopmentCommitment(editingId, payload);
+          if (updated) {
+            setItems((prev) => prev.map((i) => (i.id === editingId ? updated : i)));
+          }
+        } else {
+          const created = await createDevelopmentCommitment(payload);
+          setItems((prev) => [created, ...prev]);
         }
+        closeModal();
       } catch {
-        setError("Could not update modules.");
+        setError("Could not save commitment.");
       }
     });
   }
 
   /**
-   * Delete a commitment.
+   * Delete a commitment and close the modal if it was open for that record.
    * @param id The commitment id.
    * @returns Nothing.
    */
@@ -623,6 +398,7 @@ export function DevelopmentCommitmentsClient({
       try {
         await deleteDevelopmentCommitment(id);
         setItems((prev) => prev.filter((item) => item.id !== id));
+        if (editingId === id) closeModal();
       } catch {
         setError("Could not delete commitment.");
       }
@@ -667,7 +443,12 @@ export function DevelopmentCommitmentsClient({
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm font-medium">Sort by</span>
+        <Button onClick={openCreate}>
+          <Plus className="h-4 w-4" />
+          New commitment
+        </Button>
+
+        <span className="ml-2 text-sm font-medium">Sort by</span>
         <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
           <SelectTrigger className="w-40">
             <SelectValue />
@@ -703,91 +484,341 @@ export function DevelopmentCommitmentsClient({
         </div>
       </div>
 
-      {/* Commitment form */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {editingId ? "Edit commitment" : "Add commitment"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleCreate} className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="itemName">Name *</Label>
-              <Input
-                id="itemName"
-                value={itemForm.itemName}
-                onChange={(e) => setItemForm((prev) => ({ ...prev, itemName: e.target.value }))}
-                placeholder="e.g. AWS Solutions Architect"
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="itemDesc">Description</Label>
-              <Textarea
-                id="itemDesc"
-                rows={2}
-                value={itemForm.description}
-                onChange={(e) => setItemForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="What you learned and how it applies to your work"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="itemDate">Date started</Label>
-                <Input
-                  id="itemDate"
-                  type="date"
-                  value={itemForm.itemDate}
-                  onChange={(e) => setItemForm((prev) => ({ ...prev, itemDate: e.target.value }))}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="dateCompleted">Date completed</Label>
-                <Input
-                  id="dateCompleted"
-                  type="date"
-                  value={itemForm.dateCompleted}
-                  onChange={(e) => setItemForm((prev) => ({ ...prev, dateCompleted: e.target.value }))}
-                />
-              </div>
-            </div>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <div className="flex gap-2">
-              <Button type="submit" disabled={isPending}>
-                {editingId ? "Save changes" : "Add"}
-              </Button>
-              {editingId ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => { setEditingId(null); setItemForm(emptyItemForm()); }}
-                >
-                  Cancel
-                </Button>
-              ) : null}
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      {/* Table */}
+      {sorted.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            Nothing yet. Click{" "}
+            <span className="font-medium text-foreground">New commitment</span> to add one.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted text-left">
+              <tr>
+                <th className="px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Name
+                </th>
+                <th className="px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Modules
+                </th>
+                <th className="px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Started
+                </th>
+                <th className="px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+                  Completed
+                </th>
+                <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((item) => {
+                const doneMods = item.modules.filter((m) => m.finished).length;
+                return (
+                  <tr
+                    key={item.id}
+                    onClick={() => openEdit(item)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openEdit(item);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Open ${item.itemName}`}
+                    className="cursor-pointer border-t border-border transition hover:bg-muted/50 focus:bg-muted/50 focus:outline-none"
+                  >
+                    <td className="max-w-xs truncate px-4 py-3 font-medium">
+                      {item.itemName}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {item.modules.length > 0
+                        ? `${doneMods}/${item.modules.length}`
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {item.itemDate ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {item.dateCompleted ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label="Edit"
+                          disabled={isPending}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEdit(item);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label="Delete"
+                          disabled={isPending}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(item.id);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {/* List */}
-      <div className="flex flex-col gap-3">
-        {sorted.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing yet.</p>
-        ) : (
-          sorted.map((item) => (
-            <CommitmentCard
-              key={item.id}
-              item={item}
-              disabled={isPending}
-              onPersist={persist}
-              onDelete={() => handleDelete(item.id)}
-              onEditItem={startEditItem}
-            />
-          ))
-        )}
-      </div>
+      {/* Create / Edit modal */}
+      <Dialog.Root open={modalOpen} onOpenChange={(v) => { if (!v) closeModal(); }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
+          <Dialog.Content
+            className="fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-border bg-card shadow-xl focus:outline-none"
+            aria-describedby={undefined}
+          >
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <Dialog.Title className="text-lg font-semibold">
+                {editingId ? "Edit commitment" : "New commitment"}
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <Button variant="ghost" size="icon-xs" aria-label="Close">
+                  <X className="h-4 w-4" />
+                </Button>
+              </Dialog.Close>
+            </div>
+
+            <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+              <div className="flex flex-col gap-3 overflow-y-auto px-6 py-4">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="itemName">Name *</Label>
+                  <Input
+                    id="itemName"
+                    value={itemForm.itemName}
+                    onChange={(e) => setItemForm((prev) => ({ ...prev, itemName: e.target.value }))}
+                    placeholder="e.g. AWS Solutions Architect"
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="itemDesc">Description</Label>
+                  <Textarea
+                    id="itemDesc"
+                    rows={2}
+                    value={itemForm.description}
+                    onChange={(e) => setItemForm((prev) => ({ ...prev, description: e.target.value }))}
+                    placeholder="What you learned and how it applies to your work"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="itemDate">Date started</Label>
+                    <Input
+                      id="itemDate"
+                      type="date"
+                      value={itemForm.itemDate}
+                      onChange={(e) => setItemForm((prev) => ({ ...prev, itemDate: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="dateCompleted">Date completed</Label>
+                    <Input
+                      id="dateCompleted"
+                      type="date"
+                      value={itemForm.dateCompleted}
+                      onChange={(e) => setItemForm((prev) => ({ ...prev, dateCompleted: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                {/* Modules manager */}
+                <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Modules
+                  </span>
+                  {modules.map((mod) => (
+                    <div key={mod.id} className="flex items-start gap-2 rounded-md bg-muted/40 p-2">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={mod.finished}
+                        onChange={() => toggleModule(mod.id)}
+                      />
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className={mod.finished ? "line-through text-muted-foreground" : "font-medium"}>
+                          {mod.moduleName}
+                          {mod.hours != null ? ` (${mod.hours}h)` : ""}
+                          {mod.required ? (
+                            <span className="ml-1 text-xs text-muted-foreground">[required]</span>
+                          ) : null}
+                        </span>
+                        {mod.description ? (
+                          <span className="text-xs text-muted-foreground">{mod.description}</span>
+                        ) : null}
+                        {(mod.dateStarted ?? mod.dateFinished) ? (
+                          <span className="text-xs text-muted-foreground">
+                            {mod.dateStarted ?? "—"} → {mod.dateFinished ?? "—"}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => startEditModule(mod)}
+                          aria-label="Edit module"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => removeModule(mod.id)}
+                          aria-label="Remove module"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {showModForm ? (
+                    <div className="flex flex-col gap-2 rounded-md border border-border p-2">
+                      <div className="flex flex-col gap-1">
+                        <Label>Module name *</Label>
+                        <Input
+                          value={moduleDraft.moduleName}
+                          onChange={(e) => setModuleDraft((d) => ({ ...d, moduleName: e.target.value }))}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label>Description</Label>
+                        <Textarea
+                          rows={2}
+                          value={moduleDraft.description}
+                          onChange={(e) => setModuleDraft((d) => ({ ...d, description: e.target.value }))}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col gap-1">
+                          <Label>Type</Label>
+                          <Input
+                            value={moduleDraft.type}
+                            onChange={(e) => setModuleDraft((d) => ({ ...d, type: e.target.value }))}
+                            placeholder="e.g. Course"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label>Hours</Label>
+                          <Input
+                            type="number"
+                            value={moduleDraft.hours}
+                            onChange={(e) => setModuleDraft((d) => ({ ...d, hours: e.target.value }))}
+                            min={0}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label>Date started</Label>
+                          <Input
+                            type="date"
+                            value={moduleDraft.dateStarted}
+                            onChange={(e) => setModuleDraft((d) => ({ ...d, dateStarted: e.target.value }))}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label>Date completed</Label>
+                          <Input
+                            type="date"
+                            value={moduleDraft.dateFinished}
+                            onChange={(e) => setModuleDraft((d) => ({ ...d, dateFinished: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={moduleDraft.finished}
+                            onChange={(e) => setModuleDraft((d) => ({ ...d, finished: e.target.checked }))}
+                          />
+                          Finished
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={moduleDraft.required}
+                            onChange={(e) => setModuleDraft((d) => ({ ...d, required: e.target.checked }))}
+                          />
+                          Required
+                        </label>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" size="sm" onClick={saveModule}>
+                          {editingModId ? "Save module" : "Add module"}
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" onClick={resetModuleDraft}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="self-start"
+                      onClick={() => setShowModForm(true)}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add module
+                    </Button>
+                  )}
+                </div>
+
+                {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              </div>
+
+              <div className="flex items-center gap-2 border-t border-border px-6 py-4">
+                {editingId ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => handleDelete(editingId)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </Button>
+                ) : null}
+                <div className="ml-auto flex gap-2">
+                  <Button type="button" variant="outline" onClick={closeModal} disabled={isPending}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isPending}>
+                    {editingId ? "Save changes" : "Add"}
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <JsonImportModal
         expectedType="dcomm1"
