@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2, Plus, Pencil, Download, Upload, Info } from "lucide-react";
 import { JsonImportModal } from "@/components/json-import-modal";
+import { createZip, slugifyFileName } from "@/lib/zip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -112,16 +113,6 @@ function downloadBlob(content: string, filename: string, mime: string): void {
 }
 
 /**
- * Trigger a browser download of a markdown string.
- * @param content The markdown text.
- * @param filename The base filename (without extension).
- * @returns Nothing.
- */
-function downloadMarkdown(content: string, filename: string): void {
-  downloadBlob(content, `${filename}.md`, "text/markdown; charset=utf-8");
-}
-
-/**
  * Export event commitments as a JSON file matching the app's import schema.
  * @param items The event commitments to export.
  * @param jsonType The envelope type string (e.g. "bcomm2").
@@ -142,36 +133,54 @@ function exportJson(items: EventCommitment[], jsonType: string, slug: string): v
 }
 
 /**
- * Generate and download a markdown export of all event commitments.
+ * Build the markdown content for a single event commitment.
+ * @param item The event commitment.
+ * @returns The markdown string for that one item.
+ */
+function itemToMarkdown(item: EventCommitment): string {
+  let md = `# ${item.eventName}\n\n`;
+  if (item.type) md += `**Type:** ${item.type}  \n`;
+  if (item.started) md += `**Started:** ${item.started}  \n`;
+  if (item.finished) md += `**Finished:** ${item.finished}  \n`;
+  md += `**Required:** ${item.required ? "Yes" : "No"}  \n`;
+  md += `**Done:** ${item.done ? "Yes" : "No"}  \n\n`;
+  if (item.description) md += `${item.description}\n\n`;
+  if (item.subItems.length > 0) {
+    md += `## Sub-events\n\n`;
+    for (const sub of item.subItems) {
+      const check = sub.done ? "[x]" : "[ ]";
+      md += `- ${check} **${sub.subEventName}**\n`;
+      if (sub.description) md += `  - ${sub.description}\n`;
+      if (sub.started || sub.finished)
+        md += `  - ${sub.started ?? "—"} → ${sub.finished ?? "—"}\n`;
+    }
+    md += "\n";
+  }
+  return md;
+}
+
+/**
+ * Export each event commitment as its own markdown file, bundled into a single
+ * downloadable ZIP archive (one .md per item).
  * @param items The event commitments to export.
- * @param pageTitle The page title used as the markdown heading.
- * @param slug The filename slug.
+ * @param slug The base filename slug for the archive.
  * @returns Nothing.
  */
-function exportMarkdown(items: EventCommitment[], pageTitle: string, slug: string): void {
-  let md = `# ${pageTitle}\n\n`;
-  for (const item of items) {
-    md += `## ${item.eventName}\n\n`;
-    if (item.type) md += `**Type:** ${item.type}  \n`;
-    if (item.started) md += `**Started:** ${item.started}  \n`;
-    if (item.finished) md += `**Finished:** ${item.finished}  \n`;
-    md += `**Required:** ${item.required ? "Yes" : "No"}  \n`;
-    md += `**Done:** ${item.done ? "Yes" : "No"}  \n\n`;
-    if (item.description) md += `${item.description}\n\n`;
-    if (item.subItems.length > 0) {
-      md += `### Sub-events\n\n`;
-      for (const sub of item.subItems) {
-        const check = sub.done ? "[x]" : "[ ]";
-        md += `- ${check} **${sub.subEventName}**\n`;
-        if (sub.description) md += `  - ${sub.description}\n`;
-        if (sub.started || sub.finished)
-          md += `  - ${sub.started ?? "—"} → ${sub.finished ?? "—"}\n`;
-      }
-      md += "\n";
-    }
-    md += "---\n\n";
-  }
-  downloadMarkdown(md, slug);
+function exportMarkdown(items: EventCommitment[], slug: string): void {
+  if (items.length === 0) return;
+  const entries = items.map((item, i) => ({
+    name: `${String(i + 1).padStart(2, "0")}-${slugifyFileName(item.eventName)}.md`,
+    content: itemToMarkdown(item),
+  }));
+  const zip = createZip(entries);
+  const url = URL.createObjectURL(zip);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${slug}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 /**
@@ -652,7 +661,7 @@ export function EventCommitmentClient({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => exportMarkdown(sorted, title, slug)}
+            onClick={() => exportMarkdown(sorted, slug)}
           >
             <Download className="h-4 w-4" />
             Export MD

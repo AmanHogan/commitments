@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2, Plus, Pencil, Download, Upload, Info } from "lucide-react";
 import { JsonImportModal } from "@/components/json-import-modal";
+import { createZip, slugifyFileName } from "@/lib/zip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -145,16 +146,6 @@ function downloadBlob(content: string, filename: string, mime: string): void {
 }
 
 /**
- * Trigger a browser download of a markdown string.
- * @param content The markdown text.
- * @param filename The base filename (without extension).
- * @returns Nothing.
- */
-function downloadMarkdown(content: string, filename: string): void {
-  downloadBlob(content, `${filename}.md`, "text/markdown; charset=utf-8");
-}
-
-/**
  * Export development commitments as a JSON file matching the app's import schema.
  * @param items The commitments to export.
  * @returns Nothing.
@@ -173,36 +164,54 @@ function exportJson(items: DevelopmentCommitmentOne[]): void {
 }
 
 /**
- * Generate and download a markdown export of all development commitments.
+ * Build the markdown content for a single development commitment.
+ * @param item The commitment.
+ * @returns The markdown string for that one item.
+ */
+function itemToMarkdown(item: DevelopmentCommitmentOne): string {
+  let md = `# ${item.itemName}\n\n`;
+  if (item.itemDate) md += `**Date:** ${item.itemDate}  \n`;
+  if (item.dateCompleted) md += `**Completed:** ${item.dateCompleted}  \n`;
+  md += "\n";
+  if (item.description) md += `${item.description}\n\n`;
+  if (item.modules.length > 0) {
+    md += `## Modules\n\n`;
+    for (const mod of item.modules) {
+      const check = mod.finished ? "[x]" : "[ ]";
+      md += `- ${check} **${mod.moduleName}**`;
+      if (mod.hours != null) md += ` (${mod.hours}h)`;
+      md += `  \n`;
+      if (mod.description) md += `  > ${mod.description}  \n`;
+      if (mod.dateStarted || mod.dateFinished)
+        md += `  Started: ${mod.dateStarted ?? "—"} · Finished: ${mod.dateFinished ?? "—"}  \n`;
+      if (mod.type) md += `  Type: ${mod.type}  \n`;
+      if (mod.required) md += `  Required  \n`;
+      md += "\n";
+    }
+  }
+  return md;
+}
+
+/**
+ * Export each development commitment as its own markdown file, bundled into a
+ * single downloadable ZIP archive (one .md per item).
  * @param items The commitments to export.
  * @returns Nothing.
  */
 function exportMarkdown(items: DevelopmentCommitmentOne[]): void {
-  let md = "# Development Commitments\n\n";
-  for (const item of items) {
-    md += `## ${item.itemName}\n\n`;
-    if (item.itemDate) md += `**Date:** ${item.itemDate}  \n`;
-    if (item.dateCompleted) md += `**Completed:** ${item.dateCompleted}  \n`;
-    md += "\n";
-    if (item.description) md += `${item.description}\n\n`;
-    if (item.modules.length > 0) {
-      md += `### Modules\n\n`;
-      for (const mod of item.modules) {
-        const check = mod.finished ? "[x]" : "[ ]";
-        md += `- ${check} **${mod.moduleName}**`;
-        if (mod.hours != null) md += ` (${mod.hours}h)`;
-        md += `  \n`;
-        if (mod.description) md += `  > ${mod.description}  \n`;
-        if (mod.dateStarted || mod.dateFinished)
-          md += `  Started: ${mod.dateStarted ?? "—"} · Finished: ${mod.dateFinished ?? "—"}  \n`;
-        if (mod.type) md += `  Type: ${mod.type}  \n`;
-        if (mod.required) md += `  Required  \n`;
-        md += "\n";
-      }
-    }
-    md += "---\n\n";
-  }
-  downloadMarkdown(md, "development-commitments");
+  if (items.length === 0) return;
+  const entries = items.map((item, i) => ({
+    name: `${String(i + 1).padStart(2, "0")}-${slugifyFileName(item.itemName)}.md`,
+    content: itemToMarkdown(item),
+  }));
+  const url = URL.createObjectURL(createZip(entries));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "development-commitments.zip";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 /**
