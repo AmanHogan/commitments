@@ -5,9 +5,28 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // Override default ignores of eslint-config-next.
+  // Strict project rules — see AINSTRUCTIONS.md. Type-aware rules require the
+  // TypeScript project service, enabled below.
+  {
+    files: ["**/*.ts", "**/*.tsx"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      // 2 & 3: `any` is banned everywhere.
+      "@typescript-eslint/no-explicit-any": "error",
+      // 3: no @ts-ignore / @ts-expect-error / @ts-nocheck.
+      "@typescript-eslint/ban-ts-comment": "error",
+      // 4: every function must declare an explicit return type.
+      "@typescript-eslint/explicit-function-return-type": "error",
+      // 5: no floating promises.
+      "@typescript-eslint/no-floating-promises": "error",
+    },
+  },
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",
