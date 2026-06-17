@@ -40,6 +40,15 @@ export async function connectToDatabase(): Promise<Mongoose> {
       bufferCommands: false,
     });
   }
-  cache.conn = await cache.promise;
+  try {
+    cache.conn = await cache.promise;
+  } catch (err) {
+    // Don't leave a rejected promise cached — otherwise every later request
+    // re-awaits the same dead promise and the app can never reconnect (e.g.
+    // if MongoDB was briefly unavailable at startup). Clear it so the next
+    // call retries a fresh connection.
+    cache.promise = null;
+    throw err;
+  }
   return cache.conn;
 }
