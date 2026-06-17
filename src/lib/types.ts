@@ -261,7 +261,9 @@ export interface EventCommitment {
   id: string;
   eventName: string;
   type: string | null;
+  applicationContext: string | null;
   description: string | null;
+  impact: string | null;
   started: string | null;
   finished: string | null;
   done: boolean;
@@ -274,7 +276,9 @@ export interface EventCommitment {
 export interface CreateEventCommitmentInput {
   eventName: string;
   type?: string | null;
+  applicationContext?: string | null;
   description?: string | null;
+  impact?: string | null;
   started?: string | null;
   finished?: string | null;
   done?: boolean;

@@ -43,7 +43,9 @@ type SortDir = "asc" | "desc";
 interface EventFormState {
   eventName: string;
   type: string;
+  applicationContext: string;
   description: string;
+  impact: string;
   started: string;
   finished: string;
   required: boolean;
@@ -63,7 +65,7 @@ interface SubDraft {
  * @returns A blank event form.
  */
 function emptyEventForm(): EventFormState {
-  return { eventName: "", type: "", description: "", started: "", finished: "", required: false, done: false };
+  return { eventName: "", type: "", applicationContext: "", description: "", impact: "", started: "", finished: "", required: false, done: false };
 }
 
 /**
@@ -84,7 +86,9 @@ function toInput(form: EventFormState, subItems: EventSubItemInput[]): CreateEve
   return {
     eventName: form.eventName.trim(),
     type: form.type || null,
+    applicationContext: form.applicationContext || null,
     description: form.description || null,
+    impact: form.impact || null,
     started: form.started || null,
     finished: form.finished || null,
     required: form.required,
@@ -144,7 +148,10 @@ function itemToMarkdown(item: EventCommitment): string {
   if (item.finished) md += `**Finished:** ${item.finished}  \n`;
   md += `**Required:** ${item.required ? "Yes" : "No"}  \n`;
   md += `**Done:** ${item.done ? "Yes" : "No"}  \n\n`;
+  if (item.applicationContext)
+    md += `**Application Context:** ${item.applicationContext}\n\n`;
   if (item.description) md += `${item.description}\n\n`;
+  if (item.impact) md += `**Impact:** ${item.impact}\n\n`;
   if (item.subItems.length > 0) {
     md += `## Sub-events\n\n`;
     for (const sub of item.subItems) {
@@ -282,7 +289,19 @@ function EventCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
+        {item.applicationContext ? (
+          <p>
+            <span className="font-medium text-muted-foreground">Application context: </span>
+            {item.applicationContext}
+          </p>
+        ) : null}
         {item.description ? <p>{item.description}</p> : null}
+        {item.impact ? (
+          <p>
+            <span className="font-medium text-muted-foreground">Impact: </span>
+            {item.impact}
+          </p>
+        ) : null}
         <p className="text-xs text-muted-foreground">
           {item.type ? `${item.type} · ` : ""}
           {item.started ?? "—"} → {item.finished ?? "—"}
@@ -489,7 +508,9 @@ export function EventCommitmentClient({
       {
         eventName: item.eventName,
         type: item.type ?? "",
+        applicationContext: item.applicationContext ?? "",
         description: item.description ?? "",
+        impact: item.impact ?? "",
         started: item.started ?? "",
         finished: item.finished ?? "",
         required: item.required,
@@ -565,7 +586,9 @@ export function EventCommitmentClient({
     setForm({
       eventName: item.eventName,
       type: item.type ?? "",
+      applicationContext: item.applicationContext ?? "",
       description: item.description ?? "",
+      impact: item.impact ?? "",
       started: item.started ?? "",
       finished: item.finished ?? "",
       required: item.required,
@@ -696,12 +719,30 @@ export function EventCommitmentClient({
               />
             </div>
             <div className="flex flex-col gap-1">
+              <Label htmlFor="applicationContext">Application context</Label>
+              <Textarea
+                id="applicationContext"
+                rows={2}
+                value={form.applicationContext}
+                onChange={(e) => setForm((prev) => ({ ...prev, applicationContext: e.target.value }))}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
                 rows={2}
                 value={form.description}
                 onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="impact">Impact</Label>
+              <Textarea
+                id="impact"
+                rows={2}
+                value={form.impact}
+                onChange={(e) => setForm((prev) => ({ ...prev, impact: e.target.value }))}
               />
             </div>
             <div className="grid grid-cols-2 gap-3">

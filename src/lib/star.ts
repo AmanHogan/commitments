@@ -72,7 +72,7 @@ export function eventToStar(
   e: EventCommitment,
   sourceType: "bcomm2" | "dcomm2",
 ): StarEntry {
-  const result =
+  const delivered =
     e.subItems.length > 0
       ? `Delivered: ${e.subItems
           .map((s) => s.subEventName)
@@ -84,10 +84,10 @@ export function eventToStar(
     sourceType,
     sourceId: e.id,
     title: e.eventName,
-    situation: e.description ?? "",
+    situation: joinParts([e.applicationContext, e.description]),
     task: e.type ? `Role / type: ${e.type}` : "",
     action: e.description ?? "",
-    result,
+    result: joinParts([e.impact, delivered]),
   };
 }
 
